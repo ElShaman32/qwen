@@ -162,6 +162,24 @@ class ProductoDao {
     return filas > 0;
   }
 
+  /// Productos próximos a vencer (próximos 7 días, incluyendo hoy).
+  Future<List<ProductoData>> obtenerPorVencer() {
+    final ahora = DateTime.now();
+    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    final en7Dias = hoy.add(const Duration(days: 7));
+    final hoyEpoch = hoy.millisecondsSinceEpoch ~/ 1000;
+    final en7DiasEpoch = en7Dias.millisecondsSinceEpoch ~/ 1000;
+
+    return (_db.select(_db.producto)
+          ..where((t) =>
+              t.activo.equals(true) &
+              t.fechaVencimiento.isNotNull() &
+              t.fechaVencimiento.isBiggerOrEqualValue(hoyEpoch) &
+              t.fechaVencimiento.isSmallerOrEqualValue(en7DiasEpoch))
+          ..orderBy([(t) => OrderingTerm(expression: t.fechaVencimiento)]))
+        .get();
+  }
+
   /// Cuenta total de productos activos (para límite de plan gratis).
   Future<int> contarActivos() async {
     final count = _db.producto.id.count();

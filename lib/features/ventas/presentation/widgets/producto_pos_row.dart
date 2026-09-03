@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/database/app_database.dart';
-import '../../../../core/utils/formato.dart';
+import '../../../../core/widgets/ui/precio_display.dart';
+import '../../../../core/widgets/ui/stock_chip.dart';
 
-/// Fila compacta de producto para lista (más práctica en teléfonos).
+/// Fila compacta de producto para lista (teléfonos < 600px).
+/// Bs dominante, stock semáforo, iconos Lucide.
 class ProductoPosRow extends StatelessWidget {
   final ProductoData producto;
   final double tasa;
@@ -17,19 +20,35 @@ class ProductoPosRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
     final agotado = producto.stock <= 0;
 
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 2),
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
+        borderRadius: BorderRadius.circular(14),
         onTap: agotado ? null : onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: s.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: s.outlineVariant.withValues(alpha: 0.4)),
+          ),
           child: Row(
             children: [
-              // Nombre + stock
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: s.primary.withValues(alpha: 0.10),
+                ),
+                child: Icon(LucideIcons.package, color: s.primary, size: 22),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,61 +58,52 @@ class ProductoPosRow extends StatelessWidget {
                         Expanded(
                           child: Text(
                             producto.nombre,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: theme.textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         if (producto.esGranel)
-                          Icon(Icons.scale,
-                              size: 16, color: theme.colorScheme.primary),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Icon(LucideIcons.scale,
+                                size: 14, color: s.primary),
+                          ),
                         if (producto.exentoIva)
-                          const Icon(Icons.money_off, size: 16),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Icon(LucideIcons.banknote,
+                                size: 14, color: s.onSurfaceVariant),
+                          ),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      agotado ? 'Agotado' : _stockLabel(),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: agotado
-                            ? theme.colorScheme.error
-                            : theme.colorScheme.onSurfaceVariant,
+                    if (producto.codigo != null && producto.codigo!.isNotEmpty)
+                      Text(
+                        'Cód. ${producto.codigo}',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: s.onSurfaceVariant),
                       ),
+                    const SizedBox(height: 4),
+                    StockChip(
+                      stock: producto.stock,
+                      esGranel: producto.esGranel,
+                      unidad: producto.unidadMedida,
                     ),
                   ],
                 ),
               ),
-              // Precios
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    Formato.usd(producto.precioUsd),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                  Text(
-                    Formato.bs(producto.precioUsd * tasa),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
               const SizedBox(width: 8),
-              Icon(Icons.add_circle_outline, color: theme.colorScheme.primary),
+              PrecioDisplay(
+                precioUsd: producto.precioUsd,
+                tasa: tasa,
+                bsDominante: true,
+                compacto: true,
+              ),
             ],
           ),
         ),
       ),
     );
   }
-
-  String _stockLabel() => producto.esGranel
-      ? 'Disp: ${Formato.numero(producto.stock, decimales: 2)} ${producto.unidadMedida ?? 'kg'}'
-      : 'Disp: ${producto.stock.toInt()} und';
 }

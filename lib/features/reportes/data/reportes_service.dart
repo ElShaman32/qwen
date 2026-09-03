@@ -230,6 +230,57 @@ class ReportesService {
     return lista;
   }
 
+  /// Resumen diario de ventas y ganancia de los últimos [dias] días.
+  /// Una sola query a Drift, agrupación en memoria. Offline-first.
+  Future<List<ResumenDiario>> resumenUltimosDias(int dias) async {
+    final ahora = DateTime.now();
+    final hoyLimpio = DateTime(ahora.year, ahora.month, ahora.day);
+    final inicio = hoyLimpio.subtract(Duration(days: dias - 1));
+    final inicioMs = inicio.millisecondsSinceEpoch;
+
+    // 1. Una sola query: todas las ventas no anuladas del rango
+    final ventas = await (_db.select(_db.venta)
+          ..where((t) =>
+              t.fecha.isBiggerOrEqualValue(inicioMs) & t.anulada.equals(false)))
+        .get();
+
+    // 2. Agrupar por día (clave = epoch del día limpio)
+    final ventasPorDia = <int, double>{};
+    final ganPorDia = <int, double>{};
+
+    for (final v in ventas) {
+      final diaVenta = DateTime.fromMillisecondsSinceEpoch(v.fecha);
+      final diaLimpio = DateTime(diaVenta.year, diaVenta.month, diaVenta.day);
+      final clave = diaLimpio.millisecondsSinceEpoch;
+
+      ventasPorDia[clave] = (ventasPorDia[clave] ?? 0) + v.totalUsd;
+
+      // Ganancia = suma de (subtotal - costo) por item
+      final items = (jsonDecode(v.itemsJson) as List)
+          .map((e) => ItemVenta.fromJson(e as Map<String, dynamic>))
+          .toList();
+      double gan = 0;
+      for (final i in items) {
+        gan += i.subtotalUsd - (i.costoUnitarioUsd * i.cantidad);
+      }
+      ganPorDia[clave] = (ganPorDia[clave] ?? 0) + gan;
+    }
+
+    // 3. Construir la lista con los [dias] días (incluyendo los vacíos = 0)
+    final resultado = <ResumenDiario>[];
+    for (int i = 0; i < dias; i++) {
+      final fechaDia = hoyLimpio.subtract(Duration(days: dias - 1 - i));
+      final clave = fechaDia.millisecondsSinceEpoch;
+      resultado.add(ResumenDiario(
+        fecha: fechaDia,
+        ventas: ventasPorDia[clave] ?? 0,
+        ganancia: ganPorDia[clave] ?? 0,
+      ));
+    }
+
+    return resultado;
+  }
+
   /// Ventas no anuladas desde [inicio] (para exportación).
   Future<List<VentaData>> ventasDelPeriodo(int inicio) => _ventasDesde(inicio);
 }
@@ -249,6 +300,19 @@ class _ItemNotaCredito {
         cantidad: (json['cantidad'] as num?)?.toDouble() ?? 0,
         costoUnitarioUsd: (json['costoUnitarioUsd'] as num?)?.toDouble() ?? 0,
       );
+}
+
+/// Resumen de un día específico (ventas y ganancia).
+class ResumenDiario {
+  final DateTime fecha;
+  final double ventas;
+  final double ganancia;
+
+  const ResumenDiario({
+    required this.fecha,
+    required this.ventas,
+    required this.ganancia,
+  });
 }
 
 final reportesServiceProvider = Provider<ReportesService>(

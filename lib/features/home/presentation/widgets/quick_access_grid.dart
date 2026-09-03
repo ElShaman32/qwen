@@ -1,154 +1,148 @@
-import 'package:el_cuaderno_de_mario/core/config/app_config_notifier.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_lucide_animated/flutter_lucide_animated.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/config/app_config_notifier.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/widgets/ui/animated_module_tile.dart';
 import '../../../auth/application/current_user_provider.dart';
 
-/// Item de acceso rápido en el dashboard.
-class _QuickAccessItem {
-  final String label;
-  final IconData icon;
-  final String route;
-  final bool soloAdmin;
-  final bool soloPagos;
-  final bool soloPremium;
-
-  const _QuickAccessItem({
+class _Modulo {
+  const _Modulo({
     required this.label,
-    required this.icon,
+    required this.icono,
     required this.route,
+    required this.color,
     this.soloAdmin = false,
     this.soloPagos = false,
     this.soloPremium = false,
   });
+
+  final String label;
+  final LucideAnimatedIconData icono;
+  final String route;
+  final Color color;
+  final bool soloAdmin;
+  final bool soloPagos;
+  final bool soloPremium;
 }
 
-const _allItems = [
-  _QuickAccessItem(
-      label: 'Ventas', icon: Icons.point_of_sale, route: AppRoutes.ventas),
-  _QuickAccessItem(
-      label: 'Inventario',
-      icon: Icons.inventory,
-      route: AppRoutes.inventario,
-      soloAdmin: true),
-  _QuickAccessItem(label: 'Caja', icon: Icons.payments, route: AppRoutes.caja),
-  _QuickAccessItem(
-      label: 'Clientes',
-      icon: Icons.people,
-      route: AppRoutes.clientes,
-      soloAdmin: true),
-  _QuickAccessItem(
-      label: 'Reportes',
-      icon: Icons.bar_chart,
-      route: AppRoutes.reportes,
-      soloAdmin: true),
-  _QuickAccessItem(
-      label: 'Configuración',
-      icon: Icons.settings,
-      route: AppRoutes.configuracion,
-      soloAdmin: true),
-  _QuickAccessItem(
-      label: 'RRHH',
-      icon: Icons.badge,
-      route: AppRoutes.rrhh,
-      soloAdmin: true,
-      soloPagos: true),
-  _QuickAccessItem(
-      label: 'Proveedores',
-      icon: Icons.local_shipping,
-      route: AppRoutes.proveedores,
-      soloAdmin: true,
-      soloPremium: true),
-  _QuickAccessItem(
-      label: 'Merma',
-      icon: Icons.delete,
-      route: AppRoutes.merma,
-      soloAdmin: true,
-      soloPremium: true),
-  _QuickAccessItem(
-      label: 'Movimientos',
-      icon: Icons.history,
-      route: AppRoutes.movimientos,
-      soloAdmin: true,
-      soloPremium: true),
-  _QuickAccessItem(
-      label: 'Contabilidad',
-      icon: Icons.account_balance,
-      route: AppRoutes.contabilidad,
-      soloAdmin: true,
-      soloPremium: true),
-];
-
-/// Grid de accesos rápidos a módulos. Filtra por rol.
+/// Grid de módulos estilo "Fast Menu": círculos coloreados con iconos
+/// animados (draw-in al aparecer). Gates idénticos a HomeShell.
 class QuickAccessGrid extends ConsumerWidget {
   const QuickAccessGrid({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(currentUserProvider);
     final config = ref.watch(appConfigProvider);
-    final esAdmin = user.value?.esAdmin ?? false;
+    final user = ref.watch(currentUserProvider);
+    final esAdmin = config.isDemoMode || (user.value?.esAdmin ?? false);
 
-    final items = _allItems.where((item) {
-      if (item.soloAdmin && !esAdmin) return false;
-      if (item.soloPagos && !config.puedePersonalizar) return false;
-      if (item.soloPremium && config.plan != 'todos_juguetes') return false;
+    // Colores semánticos fijos por módulo (independientes del whitelabel,
+    // como colores de categoría).
+    final modulos = <_Modulo>[
+      const _Modulo(
+          label: 'Ventas',
+          icono: cart,
+          route: AppRoutes.ventas,
+          color: Color(0xFF2E7D32)),
+      const _Modulo(
+          label: 'Inventario',
+          icono: box,
+          route: AppRoutes.inventario,
+          color: Color(0xFF1565C0),
+          soloAdmin: true),
+      const _Modulo(
+          label: 'Caja',
+          icono: hand_coins,
+          route: AppRoutes.caja,
+          color: Color(0xFFEF6C00)),
+      const _Modulo(
+          label: 'Clientes',
+          icono: users,
+          route: AppRoutes.clientes,
+          color: Color(0xFF00897B),
+          soloAdmin: true),
+      const _Modulo(
+          label: 'Reportes',
+          icono: chart_pie,
+          route: AppRoutes.reportes,
+          color: Color(0xFF6A1B9A),
+          soloAdmin: true),
+      const _Modulo(
+          label: 'Config',
+          icono: settings,
+          route: AppRoutes.configuracion,
+          color: Color(0xFF455A64),
+          soloAdmin: true),
+      const _Modulo(
+          label: 'RRHH',
+          icono: id_card,
+          route: AppRoutes.rrhh,
+          color: Color(0xFFC2185B),
+          soloAdmin: true,
+          soloPagos: true),
+      const _Modulo(
+          label: 'Proveedores',
+          icono: truck,
+          route: AppRoutes.proveedores,
+          color: Color(0xFF5D4037),
+          soloAdmin: true,
+          soloPremium: true),
+      const _Modulo(
+          label: 'Merma',
+          icono: delete,
+          route: AppRoutes.merma,
+          color: Color(0xFFC62828),
+          soloAdmin: true,
+          soloPremium: true),
+      const _Modulo(
+          label: 'Movimientos',
+          icono: history,
+          route: AppRoutes.movimientos,
+          color: Color(0xFF0097A7),
+          soloAdmin: true,
+          soloPremium: true),
+      const _Modulo(
+          label: 'Contabilidad',
+          icono: file_chart_line,
+          route: AppRoutes.contabilidad,
+          color: Color(0xFF283593),
+          soloAdmin: true,
+          soloPremium: true),
+    ].where((m) {
+      if (m.soloAdmin && !esAdmin) return false;
+      if (m.soloPagos && !config.puedePersonalizar) return false;
+      if (m.soloPremium && config.plan != 'todos_juguetes') return false;
       return true;
     }).toList();
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Responsivo: 2 cols móvil, 3 tablet, 4 desktop
-        final crossAxisCount = constraints.maxWidth > 900
-            ? 4
+        final cols = constraints.maxWidth > 900
+            ? 6
             : constraints.maxWidth > 600
-                ? 3
-                : 2;
-
-        return GridView.builder(
+                ? 5
+                : 4;
+        return GridView.count(
+          crossAxisCount: cols,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 1.3,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
-          itemCount: items.length,
-          itemBuilder: (context, index) => _buildItem(context, items[index]),
+          childAspectRatio: 0.85,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 12,
+          children: [
+            for (var i = 0; i < modulos.length; i++)
+              AnimatedModuleTile(
+                index: i,
+                icono: modulos[i].icono,
+                label: modulos[i].label,
+                color: modulos[i].color,
+                onTap: () => context.go(modulos[i].route),
+              ),
+          ],
         );
       },
-    );
-  }
-
-  Widget _buildItem(BuildContext context, _QuickAccessItem item) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => context.go(item.route),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(item.icon, size: 32, color: theme.colorScheme.primary),
-              const SizedBox(height: 8),
-              Text(
-                item.label,
-                style: theme.textTheme.labelLarge,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

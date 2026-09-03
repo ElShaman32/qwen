@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/config/app_config_notifier.dart';
 import '../../../core/constants/app_routes.dart';
 import '../../../core/database/app_database.dart';
@@ -15,6 +16,7 @@ import 'widgets/dialogo_seleccion_cliente.dart';
 
 /// Pantalla de cobro: métodos activos, fiado con cliente, recibido,
 /// vuelto normal y vuelto inteligente en $.
+/// Prioridad visual: Bs dominante (el cajero piensa en Bs).
 class CobroScreen extends ConsumerStatefulWidget {
   const CobroScreen({super.key});
 
@@ -48,20 +50,30 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
     final config = ref.watch(appConfigProvider);
     final metodosAsync = ref.watch(metodosPagoProvider);
     final theme = Theme.of(context);
+    final s = theme.colorScheme;
 
     final totalUsd = _red2(items.fold(0.0, (a, i) => a + i.subtotalUsd));
 
     if (items.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Cobro')),
-        body: const Center(child: Text('No hay productos en el carrito')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.shoppingCart, size: 48, color: s.outline),
+              const SizedBox(height: 12),
+              const Text('No hay productos en el carrito'),
+            ],
+          ),
+        ),
       );
     }
 
     final tasa = _esFiado
         ? config.tasaEfectiva
         : (_metodo?.id == 'tercera_moneda')
-            ? config.tasaEfectiva // Bs por $ para mostrar/convertir
+            ? config.tasaEfectiva
             : (_metodo?.tasaPropia ?? config.tasaEfectiva);
     final gravadoUsd = _red2(items
         .where((i) => !i.producto.exentoIva)
@@ -101,41 +113,56 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Total a pagar
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Text('TOTAL A PAGAR', style: theme.textTheme.labelLarge),
-                  const SizedBox(height: 4),
-                  Text(
-                    Formato.usd(totalUsd),
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
-                    ),
+          // ── TOTAL A PAGAR: Bs dominante ────────────────────────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: s.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(20),
+              border:
+                  Border.all(color: s.outlineVariant.withValues(alpha: 0.45)),
+            ),
+            child: Column(
+              children: [
+                Text('TOTAL A PAGAR',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                        color: s.onSurfaceVariant, letterSpacing: 0.5)),
+                const SizedBox(height: 8),
+                Text(
+                  Formato.bs(totalBs),
+                  style: theme.textTheme.displaySmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: s.onSurface,
+                    letterSpacing: -0.5,
                   ),
-                  Text(
-                    '${Formato.bs(totalBs)} · Tasa: ${Formato.numero(tasa, decimales: 2)}',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${Formato.usd(totalUsd)} · Tasa: Bs.${Formato.numero(tasa, decimales: 2)}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: s.onSurfaceVariant,
                   ),
-                  if (exentoBs > 0)
-                    Text(
+                ),
+                if (exentoBs > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
                       'Incluye exento: ${Formato.bs(exentoBs)}',
-                      style: theme.textTheme.bodySmall,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: s.onSurfaceVariant),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
-          // Métodos de pago + Fiado
-          Text('Método de pago', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 8),
+          // ── MÉTODOS DE PAGO + FIADO ────────────────────────────
+          Text('Método de pago',
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 10),
           metodosAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Error: $e'),
@@ -155,6 +182,11 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
                       }),
                     )),
                 ChoiceChip(
+                  avatar: Icon(LucideIcons.handCoins,
+                      size: 16,
+                      color: _esFiado
+                          ? s.onSecondaryContainer
+                          : s.onSurfaceVariant),
                   label: const Text('Fiado'),
                   selected: _esFiado,
                   onSelected: (_) => setState(() {
@@ -169,7 +201,7 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
             ),
           ),
 
-          // Fiado: selector de cliente
+          // ── DETALLES DEL MÉTODO ────────────────────────────────
           if (_esFiado) ...[
             const SizedBox(height: 16),
             _buildSelectorCliente(context, totalUsd),
@@ -183,15 +215,34 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
                 decoration: InputDecoration(
                   labelText: 'Recibido (${_metodo!.simbolo})',
                   hintText: esBs ? 'Ej: 600' : 'Ej: 20',
+                  prefixIcon: Icon(
+                    esBs ? LucideIcons.coins : LucideIcons.banknote,
+                    size: 20,
+                  ),
                 ),
                 onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               if (vuelto > 0)
-                Text(
-                  'Vuelto: ${esBs ? Formato.bs(vuelto) : Formato.usd(vuelto)}',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: s.tertiaryContainer.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.arrowDownUp,
+                          size: 20, color: s.tertiary),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Vuelto: ${esBs ? Formato.bs(vuelto) : Formato.usd(vuelto)}',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: s.tertiary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -200,23 +251,31 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
                 const SizedBox(height: 8),
                 TextButton.icon(
                   onPressed: () => _abrirCambioInteligente(vuelto),
-                  icon: const Icon(Icons.currency_exchange),
+                  icon: const Icon(LucideIcons.repeat, size: 18),
                   label: const Text('No tengo cambio suficiente en \$'),
                 ),
                 if (_disponibleUsd != null) ...[
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.tertiaryContainer
-                          .withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(12),
+                      color: s.tertiaryContainer.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Vuelto mixto:',
-                            style: theme.textTheme.titleSmall),
+                        Row(
+                          children: [
+                            Icon(LucideIcons.split,
+                                size: 18, color: s.tertiary),
+                            const SizedBox(width: 8),
+                            Text('Vuelto mixto:',
+                                style: theme.textTheme.titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
                         Text(
                           'Entrega ${Formato.usd(_disponibleUsd!)} + '
                           '${Formato.bs(_red2((vuelto - _disponibleUsd!) * tasa))}',
@@ -233,21 +292,38 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
               _buildTercera(context, theme, totalUsd),
             ] else ...[
               _buildDatosMetodo(context, theme),
-              Text(
-                'Cobro exacto: ${esBs ? Formato.bs(totalBs) : Formato.usd(totalUsd)}',
-                style: theme.textTheme.bodyMedium,
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: s.primaryContainer.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.checkCircle, size: 18, color: s.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Cobro exacto: ${esBs ? Formato.bs(totalBs) : Formato.usd(totalUsd)}',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
 
+          // ── CTA COBRAR ─────────────────────────────────────────
           FilledButton.icon(
             onPressed: puedeCobrar ? _cobrar : null,
-            icon: const Icon(Icons.check_circle),
+            icon: const Icon(LucideIcons.checkCircle, size: 22),
             label: const Text('¡Vale! Cobrar'),
             style: FilledButton.styleFrom(
               minimumSize: const Size(double.infinity, 56),
+              shape: const StadiumBorder(),
             ),
           ),
         ],
@@ -255,27 +331,33 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
     );
   }
 
+  // ── Selector de cliente para fiado ──────────────────────────
   Widget _buildSelectorCliente(BuildContext context, double totalUsd) {
     final theme = Theme.of(context);
+    final s = theme.colorScheme;
 
     if (_cliente == null) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Text(
-                'El fiado requiere un cliente registrado',
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: _seleccionarCliente,
-                icon: const Icon(Icons.person_search),
-                label: const Text('Seleccionar cliente'),
-              ),
-            ],
-          ),
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: s.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: s.outlineVariant.withValues(alpha: 0.45)),
+        ),
+        child: Column(
+          children: [
+            Icon(LucideIcons.userSearch, size: 36, color: s.outline),
+            const SizedBox(height: 8),
+            Text('El fiado requiere un cliente registrado',
+                style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _seleccionarCliente,
+              icon: const Icon(LucideIcons.userPlus, size: 18),
+              label: const Text('Seleccionar cliente'),
+              style: FilledButton.styleFrom(shape: const StadiumBorder()),
+            ),
+          ],
         ),
       );
     }
@@ -285,55 +367,87 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
     final excede = cliente.limiteCreditoUsd != null &&
         nuevoSaldo > cliente.limiteCreditoUsd! + 0.001;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        cliente.nombre,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: s.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: excede
+                ? s.error.withValues(alpha: 0.5)
+                : s.outlineVariant.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: s.primary.withValues(alpha: 0.12),
+                ),
+                child: Icon(LucideIcons.user, color: s.primary, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(cliente.nombre,
                         style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Saldo: ${Formato.usd(cliente.saldoPendienteUsd)} → ${Formato.usd(nuevoSaldo)}',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: s.onSurfaceVariant),
+                    ),
+                    if (cliente.limiteCreditoUsd != null)
                       Text(
-                        'Saldo: ${Formato.usd(cliente.saldoPendienteUsd)} → ${Formato.usd(nuevoSaldo)}',
-                        style: theme.textTheme.bodySmall,
+                        'Límite: ${Formato.usd(cliente.limiteCreditoUsd!)}',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: s.onSurfaceVariant),
                       ),
-                      if (cliente.limiteCreditoUsd != null)
-                        Text(
-                          'Límite: ${Formato.usd(cliente.limiteCreditoUsd!)}',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.swap_horiz),
-                  tooltip: 'Cambiar cliente',
-                  onPressed: _seleccionarCliente,
-                ),
-              ],
-            ),
-            if (excede) ...[
-              const SizedBox(height: 8),
-              Text(
-                '⚠️ Este fiado excede el límite de crédito del cliente',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                  fontWeight: FontWeight.w600,
+                  ],
                 ),
               ),
+              IconButton(
+                icon: const Icon(LucideIcons.refreshCw, size: 20),
+                tooltip: 'Cambiar cliente',
+                onPressed: _seleccionarCliente,
+              ),
             ],
+          ),
+          if (excede) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: s.errorContainer,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.alertTriangle,
+                      size: 16, color: s.onErrorContainer),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Este fiado excede el límite de crédito del cliente',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: s.onErrorContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -397,7 +511,7 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
     final tasa = _esFiado
         ? config.tasaEfectiva
         : (_metodo?.id == 'tercera_moneda')
-            ? config.tasaEfectiva // Bs por $ para mostrar/convertir
+            ? config.tasaEfectiva
             : (_metodo?.tasaPropia ?? config.tasaEfectiva);
     final totalUsd = _red2(items.fold(0.0, (a, i) => a + i.subtotalUsd));
     final gravadoUsd = _red2(items
@@ -476,7 +590,6 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
             ),
           ];
 
-    // Impuestos: base/IVA solo sobre gravado; IGTF solo divisas (fiado no)
     final baseBs = gravadoBs / (1 + config.ivaRate);
     final ivaBs = _red2(gravadoBs - baseBs);
     final igtfBs = (!_esFiado && _metodo!.esDivisa)
@@ -513,7 +626,6 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
         usuarioNombre: user?.nombre ?? 'Cajero',
       );
 
-      // Registrar el fiado en la cuenta del cliente (sube su saldo)
       if (_esFiado) {
         await ref.read(clienteDaoProvider).registrarMovimiento(
               clienteId: _cliente!.id,
@@ -538,8 +650,8 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
     }
   }
 
-  /// Tercera moneda: total en la moneda, recibido opcional y conversión.
   Widget _buildTercera(BuildContext context, ThemeData theme, double totalUsd) {
+    final s = theme.colorScheme;
     final metodo = _metodo!;
     final valor = metodo.tasaPropia ?? 0;
     final totalTercera = valor > 0 ? _red2(totalUsd / valor) : 0.0;
@@ -549,26 +661,28 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Total en ${metodo.simbolo}: ${Formato.numero(totalTercera, decimales: 2)}',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '1 ${metodo.simbolo} = \$${Formato.numero(valor, decimales: 6)}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: s.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: s.outlineVariant.withValues(alpha: 0.45)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Total en ${metodo.simbolo}: ${Formato.numero(totalTercera, decimales: 2)}',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '1 ${metodo.simbolo} = \$${Formato.numero(valor, decimales: 6)}',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: s.onSurfaceVariant),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 12),
@@ -593,8 +707,8 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
     );
   }
 
-  /// Datos del método: QR para escanear + Pago Móvil estructurado.
   Widget _buildDatosMetodo(BuildContext context, ThemeData theme) {
+    final s = theme.colorScheme;
     final m = _metodo!;
     final tieneEstructura = m.id == 'pago_movil' &&
         (m.telefono.isNotEmpty || m.cedula.isNotEmpty || m.banco.isNotEmpty);
@@ -602,48 +716,78 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
     return Column(
       children: [
         if (m.qrUrl.isNotEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Text('Escanea para pagar', style: theme.textTheme.labelLarge),
-                  const SizedBox(height: 8),
-                  Image.network(
-                    m.qrUrl,
-                    width: 180,
-                    height: 180,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) =>
-                        const Icon(Icons.qr_code, size: 72),
-                  ),
-                ],
-              ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: s.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(16),
+              border:
+                  Border.all(color: s.outlineVariant.withValues(alpha: 0.45)),
+            ),
+            child: Column(
+              children: [
+                Text('Escanea para pagar', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 8),
+                Image.network(
+                  m.qrUrl,
+                  width: 180,
+                  height: 180,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) =>
+                      const Icon(LucideIcons.qrCode, size: 72),
+                ),
+              ],
             ),
           ),
         if (tieneEstructura || m.datosPago.isNotEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (m.telefono.isNotEmpty)
-                    Text('Teléfono: ${m.telefono}',
-                        style: theme.textTheme.bodyMedium),
-                  if (m.cedula.isNotEmpty)
-                    Text('Cédula/RIF: ${m.cedula}',
-                        style: theme.textTheme.bodyMedium),
-                  if (m.banco.isNotEmpty)
-                    Text('Banco: ${m.banco}',
-                        style: theme.textTheme.bodyMedium),
-                  if (m.datosPago.isNotEmpty)
-                    Text(m.datosPago, style: theme.textTheme.bodyMedium),
-                ],
-              ),
+          Container(
+            padding: const EdgeInsets.all(14),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: s.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  Border.all(color: s.outlineVariant.withValues(alpha: 0.45)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (m.telefono.isNotEmpty)
+                  _DatoRow(icono: LucideIcons.phone, texto: m.telefono),
+                if (m.cedula.isNotEmpty)
+                  _DatoRow(icono: LucideIcons.creditCard, texto: m.cedula),
+                if (m.banco.isNotEmpty)
+                  _DatoRow(icono: LucideIcons.landmark, texto: m.banco),
+                if (m.datosPago.isNotEmpty)
+                  _DatoRow(icono: LucideIcons.info, texto: m.datosPago),
+              ],
             ),
           ),
       ],
+    );
+  }
+}
+
+class _DatoRow extends StatelessWidget {
+  const _DatoRow({required this.icono, required this.texto});
+  final IconData icono;
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icono,
+              size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+              child:
+                  Text(texto, style: Theme.of(context).textTheme.bodyMedium)),
+        ],
+      ),
     );
   }
 }

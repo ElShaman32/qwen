@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/config/app_config_notifier.dart';
 import '../../../core/constants/app_routes.dart';
 import '../../auth/application/current_user_provider.dart';
@@ -16,8 +17,8 @@ class _NavItem {
   final IconData selectedIcon;
   final String route;
   final bool soloAdmin;
-  final bool soloPagos; // Cuaderno y Calculadora+
-  final bool soloPremium; // Todos los Juguetes
+  final bool soloPagos;
+  final bool soloPremium;
 
   const _NavItem({
     required this.label,
@@ -33,68 +34,68 @@ class _NavItem {
 const _allNavItems = [
   _NavItem(
       label: 'Panel',
-      icon: Icons.dashboard_outlined,
-      selectedIcon: Icons.dashboard,
+      icon: LucideIcons.layoutDashboard,
+      selectedIcon: LucideIcons.layoutDashboard,
       route: AppRoutes.home),
   _NavItem(
       label: 'Ventas',
-      icon: Icons.point_of_sale_outlined,
-      selectedIcon: Icons.point_of_sale,
+      icon: LucideIcons.shoppingCart,
+      selectedIcon: LucideIcons.shoppingCart,
       route: AppRoutes.ventas),
   _NavItem(
       label: 'Inventario',
-      icon: Icons.inventory_2_sharp,
-      selectedIcon: Icons.inventory,
+      icon: LucideIcons.package,
+      selectedIcon: LucideIcons.package,
       route: AppRoutes.inventario,
       soloAdmin: true),
   _NavItem(
       label: 'Caja',
-      icon: Icons.payments_outlined,
-      selectedIcon: Icons.payments,
+      icon: LucideIcons.wallet,
+      selectedIcon: LucideIcons.wallet,
       route: AppRoutes.caja),
   _NavItem(
       label: 'Clientes',
-      icon: Icons.people_outline,
-      selectedIcon: Icons.people,
+      icon: LucideIcons.users,
+      selectedIcon: LucideIcons.users,
       route: AppRoutes.clientes,
       soloAdmin: true),
   _NavItem(
       label: 'Reportes',
-      icon: Icons.bar_chart_outlined,
-      selectedIcon: Icons.bar_chart,
+      icon: LucideIcons.pieChart,
+      selectedIcon: LucideIcons.pieChart,
       route: AppRoutes.reportes,
       soloAdmin: true),
   _NavItem(
       label: 'Config',
-      icon: Icons.settings_outlined,
-      selectedIcon: Icons.settings,
+      icon: LucideIcons.settings,
+      selectedIcon: LucideIcons.settings,
       route: AppRoutes.configuracion,
       soloAdmin: true),
   _NavItem(
       label: 'RRHH',
-      icon: Icons.badge_outlined,
-      selectedIcon: Icons.badge,
+      icon: LucideIcons.briefcase,
+      selectedIcon: LucideIcons.briefcase,
       route: AppRoutes.rrhh,
       soloAdmin: true,
       soloPagos: true),
   _NavItem(
       label: 'Proveedores',
-      icon: Icons.local_shipping,
-      selectedIcon: Icons.people,
+      icon: LucideIcons.truck,
+      selectedIcon: LucideIcons.truck,
       route: AppRoutes.proveedores,
       soloAdmin: true,
       soloPremium: true),
   _NavItem(
       label: 'Merma',
-      icon: Icons.delete_outline,
-      selectedIcon: Icons.delete,
+      icon: LucideIcons.trash2,
+      selectedIcon: LucideIcons.trash2,
       route: AppRoutes.merma,
       soloAdmin: true,
       soloPremium: true),
   _NavItem(
       label: 'Movimientos',
-      icon: Icons.history_outlined,
-      selectedIcon: Icons.timeline,
+      icon: LucideIcons.history,
+      selectedIcon: LucideIcons.history,
       route: AppRoutes.movimientos,
       soloAdmin: true,
       soloPremium: true),
@@ -113,9 +114,8 @@ class HomeShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final config = ref.watch(appConfigProvider);
-// En modo demo SIEMPRE es admin (sin sesión Firebase)
     final esAdmin = config.isDemoMode || (user.value?.esAdmin ?? false);
-    // Filtrar items por rol Y por plan
+
     final items = _allNavItems.where((i) {
       if (i.soloAdmin && !esAdmin) return false;
       if (i.soloPagos && !config.puedePersonalizar) return false;
@@ -123,12 +123,9 @@ class HomeShell extends ConsumerWidget {
       return true;
     }).toList();
 
-    // Activar verificación periódica de suscripción
     ref.watch(subscriptionServiceProvider);
 
-    // Verificar al volver online tras estar offline
     ref.listen(connectivityProvider, (prev, next) {
-      // prev/next son AsyncValue<bool>, accedemos al .value
       final volvioOnline = next.value == true && prev?.value == false;
       if (volvioOnline) {
         ref.read(subscriptionServiceProvider).verificarSuscripcion();
@@ -141,10 +138,8 @@ class HomeShell extends ConsumerWidget {
         if (didPop) return;
         final location = GoRouterState.of(context).matchedLocation;
         if (location != AppRoutes.home) {
-          // Atrás en pestaña secundaria -> volver al Panel
           context.go(AppRoutes.home);
         } else {
-          // Atrás en el Panel -> salir de la app (estándar Android)
           SystemNavigator.pop();
         }
       },
@@ -165,7 +160,7 @@ class HomeShell extends ConsumerWidget {
     );
   }
 
-  // ── DESKTOP: NavigationDrawer permanente ────────────────────
+  // ── DESKTOP ──────────────────────────────────────────────────
   Widget _buildDesktopLayout(
     BuildContext context,
     WidgetRef ref,
@@ -173,44 +168,53 @@ class HomeShell extends ConsumerWidget {
     AppConfigState config,
   ) {
     return Scaffold(
-      body: Row(
+      // FIX: Column arriba, Row dentro de Expanded
+      body: Column(
         children: [
-          NavigationDrawer(
-            onDestinationSelected: (index) => context.go(items[index].route),
-            selectedIndex: _getCurrentIndex(context, items),
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          const DemoModeBanner(),
+          Expanded(
+            child: Row(
+              children: [
+                NavigationDrawer(
+                  onDestinationSelected: (index) =>
+                      context.go(items[index].route),
+                  selectedIndex: _getCurrentIndex(context, items),
                   children: [
-                    Text(
-                      config.nombreEfectivo,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            config.nombreEfectivo,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
                           ),
+                          const SizedBox(height: 4),
+                          const ConnectionIndicator(),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 4),
-                    const ConnectionIndicator(),
+                    const Divider(),
+                    ...items.map((item) => NavigationDrawerDestination(
+                          icon: Icon(item.icon),
+                          selectedIcon: Icon(item.selectedIcon),
+                          label: Text(item.label),
+                        )),
                   ],
                 ),
-              ),
-              const Divider(),
-              ...items.map((item) => NavigationDrawerDestination(
-                    icon: Icon(item.icon),
-                    selectedIcon: Icon(item.selectedIcon),
-                    label: Text(item.label),
-                  )),
-            ],
+                Expanded(child: child),
+              ],
+            ),
           ),
-          const DemoModeBanner(), // ← AGREGAR
-          Expanded(child: child), // ← MODIFICAR: envolver con Expanded
         ],
       ),
     );
   }
 
-  // ── TABLET: NavigationRail lateral ──────────────────────────
+  // ── TABLET ───────────────────────────────────────────────────
   Widget _buildTabletLayout(
     BuildContext context,
     WidgetRef ref,
@@ -218,48 +222,55 @@ class HomeShell extends ConsumerWidget {
     AppConfigState config,
   ) {
     return Scaffold(
-      body: Row(
+      // FIX: Column arriba, Row dentro de Expanded
+      body: Column(
         children: [
-          NavigationRail(
-            selectedIndex: _getCurrentIndex(context, items),
-            onDestinationSelected: (index) => context.go(items[index].route),
-            labelType: NavigationRailLabelType.all,
-            leading: const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: ConnectionIndicator(),
+          const DemoModeBanner(),
+          Expanded(
+            child: Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: _getCurrentIndex(context, items),
+                  onDestinationSelected: (index) =>
+                      context.go(items[index].route),
+                  labelType: NavigationRailLabelType.all,
+                  leading: const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: ConnectionIndicator(),
+                  ),
+                  destinations: items
+                      .map((item) => NavigationRailDestination(
+                            icon: Icon(item.icon),
+                            selectedIcon: Icon(item.selectedIcon),
+                            label: Text(item.label),
+                          ))
+                      .toList(),
+                ),
+                const VerticalDivider(width: 1),
+                Expanded(child: child),
+              ],
             ),
-            destinations: items
-                .map((item) => NavigationRailDestination(
-                      icon: Icon(item.icon),
-                      selectedIcon: Icon(item.selectedIcon),
-                      label: Text(item.label),
-                    ))
-                .toList(),
           ),
-          const VerticalDivider(width: 1),
-          const DemoModeBanner(), // ← AGREGAR
-          Expanded(child: child), // ← MODIFICAR: envolver con Expanded
         ],
       ),
     );
   }
 
-  // ── MÓVIL: NavigationBar inferior ──────────────────────────
+  // ── MÓVIL ────────────────────────────────────────────────────
   Widget _buildMobileLayout(
     BuildContext context,
     WidgetRef ref,
     List<_NavItem> items,
     AppConfigState config,
   ) {
-    // En móvil mostramos máximo 5 items (límite de NavigationBar)
     final mobileItems = items.take(5).toList();
 
     return Scaffold(
+      // FIX: Column explícito arriba del child (ya era así, solo mantengo)
       body: Column(
-        // ← MODIFICAR: envolver child con Column
         children: [
-          const DemoModeBanner(), // ← AGREGAR
-          Expanded(child: child), // ← MODIFICAR: envolver con Expanded
+          const DemoModeBanner(),
+          Expanded(child: child),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -276,7 +287,7 @@ class HomeShell extends ConsumerWidget {
     );
   }
 
-  // ── HELPERS ─────────────────────────────────────────────────
+  // ── HELPERS ──────────────────────────────────────────────────
 
   int _getCurrentIndex(BuildContext context, List<_NavItem> items) {
     final location = GoRouterState.of(context).matchedLocation;
